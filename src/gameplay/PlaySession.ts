@@ -73,6 +73,8 @@ export class PlaySession {
     readonly hud: Hud,
     readonly userTeam: Team,
     readonly opponent: Team,
+    /** Campaign difficulty ramp: extra px/s for the opponent's players. */
+    readonly difficultyBonus: number = 0,
   ) {
     for (const slot of play.offense) {
       const player = new PlayerSprite(scene, 'offense', slot.position, slot.pokemon, TEAM_COLORS.offense);
@@ -83,7 +85,7 @@ export class PlaySession {
       this.offense.push(player);
     }
     for (const slot of play.defense) {
-      const player = new PlayerSprite(scene, 'defense', slot.position, slot.pokemon, TEAM_COLORS.defense);
+      const player = new PlayerSprite(scene, 'defense', slot.position, slot.pokemon, TEAM_COLORS.defense, this.difficultyBonus);
       player.role = slot.role;
       this.defense.push(player);
     }

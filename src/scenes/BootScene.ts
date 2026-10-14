@@ -22,6 +22,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.scene.start('GameScene');
+    // Everything is loaded; into the campaign (title → opponent select → matches).
+    this.scene.start('TitleScene');
   }
 }

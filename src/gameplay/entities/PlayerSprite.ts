@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DIFFICULTY_SPEED_BONUS, PLAYER_IMAGE_SIZE, PLAYER_SIZE, ROUTE_SPEED_FACTOR } from '../../config/gameplay';
+import { PLAYER_IMAGE_SIZE, PLAYER_SIZE, ROUTE_SPEED_FACTOR } from '../../config/gameplay';
 import { deriveStats, speedStatToPxPerSec, type InternalStats, type Pokemon } from '../../core/pokemon';
 import { spriteKey } from '../../data/sprites';
 import type { DefenseRole, Position, Side, Vec2 } from '../../types';
@@ -21,6 +21,7 @@ export class PlayerSprite {
   readonly internal: InternalStats;
   /** Movement speed from the internal Speed stat (see core/pokemon.ts). */
   readonly baseSpeed: number;
+  /** Campaign difficulty ramp: extra px/s (opponents only, 0 for the user's team). */
   role?: DefenseRole;
   receiverSlot?: number;
 
@@ -37,13 +38,20 @@ export class PlayerSprite {
   private moving = false;
   private bobT = 0;
 
-  constructor(scene: Phaser.Scene, side: Side, position: Position, pokemon: Pokemon, color: number) {
+  constructor(
+    scene: Phaser.Scene,
+    side: Side,
+    position: Position,
+    pokemon: Pokemon,
+    color: number,
+    difficultyBonus = 0,
+  ) {
     this.scene = scene;
     this.side = side;
     this.position = position;
     this.pokemon = pokemon;
     this.internal = deriveStats(pokemon.stats);
-    this.baseSpeed = speedStatToPxPerSec(this.internal.speed, DIFFICULTY_SPEED_BONUS);
+    this.baseSpeed = speedStatToPxPerSec(this.internal.speed, difficultyBonus);
 
     const key = spriteKey(pokemon.id);
     this.body = scene.textures.exists(key)

@@ -56,10 +56,6 @@ export const RETICLE_LOCK_RADIUS = 64; // receiver within this px of the reticle
 
 export const POST_PLAY_DELAY = 1.6;
 
-// Difficulty: extra px/s for opponents as the campaign ramps up (0 for now).
-// Player movement base speed lives in core/pokemon.ts (speedStatToPxPerSec).
-export const DIFFICULTY_SPEED_BONUS = 0;
-
 // Match structure: the user plays offense only; opponent possessions are simulated.
 export const HALVES = 2;
 export const HALF_SECONDS = 120; // 2 minutes per half

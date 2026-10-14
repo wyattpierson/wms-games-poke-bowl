@@ -1,7 +1,10 @@
 import type { PlaySession } from '../PlaySession';
 import type { Phase } from './Phase';
 
-/** The match is over: final score, win/loss, and how to play again. GameScene restarts on R. */
+/**
+ * The match is over: final score + verdict on the field, then (after a beat) hands off
+ * to the ResultScene, which records the outcome in the campaign and routes onward.
+ */
 export class MatchOverPhase implements Phase {
   constructor(private readonly session: PlaySession) {}
 
@@ -12,11 +15,14 @@ export class MatchOverPhase implements Phase {
     const { user, opponent } = s.score;
     const verdict = user > opponent ? 'WIN!' : user < opponent ? 'LOSS' : 'TIE';
     s.hud.setMessage(
-      `FINAL: ${s.userTeam.name} ${user} - ${opponent} ${s.opponent.name}\n${verdict}\nPress R to play again`,
+      `FINAL: ${s.userTeam.name} ${user} - ${opponent} ${s.opponent.name}\n${verdict}`,
     );
+    s.scene.time.delayedCall(2200, () => {
+      s.scene.scene.start('ResultScene', { teamId: s.opponent.id, userScore: user, opponentScore: opponent });
+    });
   }
 
   update(): void {
-    // waits forever; GameScene handles the restart
+    // waits for the handoff timer
   }
 }
