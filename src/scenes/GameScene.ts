@@ -1,8 +1,6 @@
 import Phaser from 'phaser';
-import { recordResult } from '../core/campaign';
 import type { MatchConfig } from '../types';
 import { buildPlay } from '../data/playbook';
-import { getRun, setRun } from '../state/runStore';
 import { Controls } from '../gameplay/controls/Controls';
 import { Field } from '../gameplay/entities/Field';
 import { PlaySession } from '../gameplay/PlaySession';
@@ -41,14 +39,20 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.controls.update();
+    // ESC opens the pause menu (forfeiting happens there, behind a confirmation).
+    if (!this.session.matchOver && this.controls.justPressed('pause')) {
+      this.pause();
+      return;
+    }
     // Clamp dt so a background tab or hiccup can't teleport players.
     this.session.update(Math.min(delta, 50) / 1000);
-    // ESC forfeits the match (a loss: the run is over). No other way out mid-match.
-    if (!this.session.matchOver && this.controls.justPressed('forfeit')) this.forfeit();
   }
 
-  private forfeit(): void {
-    setRun(recordResult(getRun(), this.config.opponent.id, 'loss'));
-    this.scene.start('GameOverScene', { reason: 'forfeit', opponentName: this.config.opponent.name });
+  /** The pause menu is its own scene (own un-zoomed camera); this scene just freezes until it resumes. */
+  private pause(): void {
+    this.scene.launch('PauseScene', { opponentId: this.config.opponent.id, opponentName: this.config.opponent.name });
+    this.scene.pause();
+    // Keys released while paused would otherwise stay "held" after resuming.
+    this.events.once(Phaser.Scenes.Events.RESUME, () => this.input.keyboard?.resetKeys());
   }
 }

@@ -34,6 +34,13 @@ export interface CampaignState {
   poaches: Poach[];
   gameOver: boolean;
   victory: boolean;
+  /**
+   * Set from the moment a match starts until its result is recorded. A SAVED run found in this
+   * state means the match was abandoned (refresh / closed tab) — see core/runSave + state/runStore.
+   */
+  matchInProgress?: string;
+  /** A just-won regular team whose Pokémon hasn't been taken (or skipped) yet. */
+  pendingPoach?: string;
 }
 
 export function clonePokemon(p: Pokemon): Pokemon {
@@ -69,9 +76,32 @@ export function recordResult(state: CampaignState, teamId: string, outcome: Matc
   if (state.gameOver || state.victory) throw new Error('The run is already over');
   if (state.results[teamId]) throw new Error(`Team ${teamId} was already faced`);
   const next: CampaignState = { ...state, results: { ...state.results, [teamId]: outcome } };
+  next.matchInProgress = undefined;
+  next.pendingPoach = outcome === 'win' && !isChampion(teamId) ? teamId : undefined;
   if (outcome === 'loss') next.gameOver = true;
   if (outcome === 'win' && isChampion(teamId)) next.victory = true;
   return next;
+}
+
+/** Mark a match as started (so abandoning it later can be detected). */
+export function startMatch(state: CampaignState, teamId: string): CampaignState {
+  if (!availableOpponents(state).some((t) => t.id === teamId)) throw new Error(`Team ${teamId} is not available`);
+  return { ...state, matchInProgress: teamId };
+}
+
+/** Treat a match that was started but never finished as a forfeit (a loss; the run is over). */
+export function abandonMatch(state: CampaignState): CampaignState {
+  return state.matchInProgress ? recordResult(state, state.matchInProgress, 'loss') : state;
+}
+
+/** Give up the pending reward Pokémon. */
+export function skipPoach(state: CampaignState): CampaignState {
+  return { ...state, pendingPoach: undefined };
+}
+
+/** Can this run be continued? (Not over, and at least one team left to face.) */
+export function isResumable(state: CampaignState): boolean {
+  return !state.gameOver && !state.victory && !runEnded(state);
 }
 
 /** Teams that can still be challenged: not yet faced (the champion included, always). */
@@ -110,6 +140,7 @@ export function applyPoach(
     ...state,
     userTeam,
     poaches: [...state.poaches, { fromTeamId, side, taken: taken.name, dropped: dropped.name }],
+    pendingPoach: undefined,
   };
 }
 

@@ -1,59 +1,65 @@
 import Phaser from 'phaser';
 import { statLine } from '../core/poach';
 import type { Pokemon } from '../core/pokemon';
-import { spriteKey } from '../data/sprites';
 import type { Position } from '../types';
-import { WHITE } from './menu';
+import { pokemonImage } from './menu';
+import { FILL, GRAY, WHITE, textStyle } from './theme';
 
 /**
  * One roster entry in the poach screen: sprite, name, position, and the five
  * user-facing stats. Purely presentational; the scene owns the click logic.
  */
 export class PokemonCard {
-  readonly width = 400;
-  readonly height = 66;
-  private readonly plate: Phaser.GameObjects.Rectangle;
+  readonly width: number;
+  readonly height = 58;
   readonly container: Phaser.GameObjects.Container;
+  private readonly plate: Phaser.GameObjects.Rectangle;
+  private selected = false;
+  private enabled = true;
 
-  constructor(
-    scene: Phaser.Scene,
-    x: number,
-    y: number,
-    pokemon: Pokemon,
-    position: Position,
-  ) {
-    this.plate = scene.add
-      .rectangle(0, 0, this.width, this.height, 0x1f2937, 1)
-      .setStrokeStyle(1, 0x4b5563)
-      .setInteractive();
+  constructor(scene: Phaser.Scene, x: number, y: number, pokemon: Pokemon, position: Position, width = 372) {
+    this.width = width;
+    const left = -width / 2;
 
-    const dexKey = spriteKey(pokemon.id);
-    const art = scene.textures.exists(dexKey)
-      ? scene.add.image(-this.width / 2 + 33, 0, dexKey).setDisplaySize(48, 48)
-      : scene.add.rectangle(-this.width / 2 + 33, 0, 48, 48, 0x374151);
+    this.plate = scene.add.rectangle(0, 0, width, this.height, FILL.plate).setInteractive({ useHandCursor: true });
+    const art = pokemonImage(scene, pokemon, left + 34, 0, 44);
+    const name = scene.add.text(left + 66, -12, pokemon.name, textStyle(16, WHITE)).setOrigin(0, 0.5);
+    const slot = scene.add.text(width / 2 - 12, -12, position, textStyle(13, GRAY)).setOrigin(1, 0.5);
+    const stats = scene.add.text(left + 66, 12, statLine(pokemon.stats).replace(/ {2,}/g, ' '), textStyle(12, '#d1d5db')).setOrigin(0, 0.5);
 
-    const name = scene.add
-      .text(-this.width / 2 + 70, -14, `${pokemon.name}  —  ${position}`, { fontFamily: 'monospace', fontSize: '17px', color: WHITE });
-    const stats = scene.add
-      .text(-this.width / 2 + 70, 12, statLine(pokemon.stats), { fontFamily: 'monospace', fontSize: '13px', color: '#d1d5db' });
-
-    this.container = scene.add.container(x, y, [this.plate, art, name, stats]);
+    this.container = scene.add.container(x, y, [this.plate, art, name, slot, stats]);
+    this.plate.on('pointerover', () => this.restyle(true));
+    this.plate.on('pointerout', () => this.restyle(false));
+    this.restyle(false);
   }
 
   get x(): number { return this.container.x; }
   get y(): number { return this.container.y; }
 
-  /** Gold border = selected; dim = not clickable (e.g. wrong side). */
+  /** Gold border = selected. */
   setSelected(on: boolean): void {
-    this.plate.setStrokeStyle(on ? 3 : 1, on ? 0xfacc15 : 0x4b5563);
+    this.selected = on;
+    this.restyle(false);
   }
 
+  /** Dimmed and unclickable (e.g. the wrong side). */
   setEnabled(on: boolean): void {
+    this.enabled = on;
     this.container.setAlpha(on ? 1 : 0.4);
-    this.plate.setInteractive(on);
+    if (on) this.plate.setInteractive({ useHandCursor: true });
+    else this.plate.disableInteractive();
   }
 
   onClick(handler: () => void): void {
-    this.plate.on('pointerdown', handler);
+    this.plate.on('pointerdown', () => {
+      if (this.enabled) handler();
+    });
+  }
+
+  private restyle(hover: boolean): void {
+    this.plate.setFillStyle(this.selected ? 0x2b3547 : FILL.plate);
+    if (this.selected) this.plate.setStrokeStyle(3, FILL.gold);
+    else if (hover) this.plate.setStrokeStyle(2, FILL.borderLight);
+    else this.plate.setStrokeStyle(1, FILL.border);
   }
 }

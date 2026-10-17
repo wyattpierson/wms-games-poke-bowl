@@ -4,6 +4,7 @@ import { deriveStats, speedStatToPxPerSec, type InternalStats, type Pokemon } fr
 import { spriteKey } from '../../data/sprites';
 import type { DefenseRole, Position, Side, Vec2 } from '../../types';
 import { clamp } from '../../core/math/vec2';
+import { textStyle } from '../../ui/theme';
 
 /**
  * A player on the field: the Pokémon's sprite (or a team-colored square fallback if the
@@ -61,7 +62,7 @@ export class PlayerSprite {
       .ellipse(0, PLAYER_IMAGE_SIZE / 2, PLAYER_IMAGE_SIZE * 0.7, PLAYER_IMAGE_SIZE * 0.28, color, 0.45)
       .setDepth(9);
     this.label = scene.add
-      .text(0, 0, pokemon.name, { fontFamily: 'monospace', fontSize: '10px', color: '#ffffff' })
+      .text(0, 0, pokemon.name, { ...textStyle(10), stroke: '#000000', strokeThickness: 2 })
       .setOrigin(0.5)
       .setDepth(11);
     this.label.setPosition(0, PLAYER_IMAGE_SIZE / 2 + 8);

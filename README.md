@@ -26,7 +26,8 @@ npm run build      # production build to dist/
 - **Pass**: `HOLD SPACE` — aim reticle appears; `WASD`/arrows steer it; `release SPACE` — throw
   (nearest receiver to the reticle; white ring shows the locked target). `R` — scramble
 - **Run**: `WASD`/arrows — move, `SHIFT` — sprint, `SPACE` — juke, `E` — dive
-- **After the final**: `R` — play again
+- **Pause**: `ESC` — pause menu (resume, or forfeit — that ends the run)
+- After the final the Result screen routes you on (ENTER/SPACE)
 
 All key bindings live in one place: `src/gameplay/controls/bindings.ts`.
 

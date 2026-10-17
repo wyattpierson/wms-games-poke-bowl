@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Pokemon } from './pokemon';
-import { compareStats, netUpgrade, statLine, USER_STATS } from './poach';
+import { averageOverall, compareStats, netUpgrade, overall, statLine, USER_STATS } from './poach';
 
 const p = (id: string, stats: Pokemon['stats']): Pokemon => ({
   id, name: id.toUpperCase(), type: 'Normal', stats,
@@ -32,5 +32,17 @@ describe('poach stat comparison', () => {
 
   it('formats a compact stat line', () => {
     expect(statLine(A.stats)).toBe('SPD 90  STR 40  THR 70  AWA 60  COO 50');
+  });
+});
+
+describe('overall ratings', () => {
+  it('is the rounded mean of the five stats', () => {
+    expect(overall(A)).toBe(62); // (90+40+70+60+50) / 5
+    expect(overall(B)).toBe(68); // (60+70+70+60+80) / 5
+  });
+
+  it('averages a group, and is 0 for an empty one', () => {
+    expect(averageOverall([A, B])).toBe(65);
+    expect(averageOverall([])).toBe(0);
   });
 });

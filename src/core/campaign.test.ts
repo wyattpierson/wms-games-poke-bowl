@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CHAMPION_DIFFICULTY_BONUS, DIFFICULTY_PER_WIN } from '../config/campaign';
 import { CHAMPION_TEAM, EMBER_BLITZ, PLAYER_TEAM } from './teams';
 import {
-  applyPoach, availableOpponents, clonePokemon, cloneTeam, difficultyBonus,
+  abandonMatch, applyPoach, availableOpponents, isResumable, skipPoach, startMatch, clonePokemon, cloneTeam, difficultyBonus,
   isChampion, newRun, recordResult, runEnded, teamById, wins, type CampaignState,
 } from './campaign';
 
@@ -143,5 +143,48 @@ describe('difficulty ramp', () => {
   it('teamById resolves every campaign team', () => {
     for (const t of [EMBER_BLITZ, CHAMPION_TEAM]) expect(teamById(t.id).id).toBe(t.id);
     expect(() => teamById('nope')).toThrow();
+  });
+});
+
+describe('saved-run bookkeeping', () => {
+  it('marks a match as in progress, and recording the result clears it', () => {
+    const started = startMatch(newRun(), EMBER);
+    expect(started.matchInProgress).toBe(EMBER);
+    expect(recordResult(started, EMBER, 'tie').matchInProgress).toBeUndefined();
+  });
+
+  it('refuses to start a team that was already faced', () => {
+    const done = recordResult(newRun(), EMBER, 'tie');
+    expect(() => startMatch(done, EMBER)).toThrow();
+  });
+
+  it('treats an abandoned match as a loss that ends the run', () => {
+    const abandoned = abandonMatch(startMatch(newRun(), EMBER));
+    expect(abandoned.results[EMBER]).toBe('loss');
+    expect(abandoned.gameOver).toBe(true);
+    expect(abandoned.matchInProgress).toBeUndefined();
+  });
+
+  it('leaves a run with no match in progress untouched when abandoning', () => {
+    const run = newRun();
+    expect(abandonMatch(run)).toBe(run);
+  });
+
+  it('flags a poach as pending after a regular win, until taken or skipped', () => {
+    const won = recordResult(newRun(), EMBER, 'win');
+    expect(won.pendingPoach).toBe(EMBER);
+    expect(applyPoach(won, 'offense', EMBER, 0, 0).pendingPoach).toBeUndefined();
+    expect(skipPoach(won).pendingPoach).toBeUndefined();
+  });
+
+  it('has no pending poach after a tie, a loss, or beating the champion', () => {
+    expect(recordResult(newRun(), EMBER, 'tie').pendingPoach).toBeUndefined();
+    expect(recordResult(newRun(), BOSS, 'win').pendingPoach).toBeUndefined();
+  });
+
+  it('only resumes runs that are still going', () => {
+    expect(isResumable(newRun())).toBe(true);
+    expect(isResumable(recordResult(newRun(), EMBER, 'loss'))).toBe(false);
+    expect(isResumable(recordResult(newRun(), BOSS, 'win'))).toBe(false);
   });
 });

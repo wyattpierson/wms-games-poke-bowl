@@ -44,3 +44,15 @@ export function netUpgrade(deltas: StatDelta[]): number {
 export function statLine(stats: UserStats): string {
   return USER_STATS.map(({ key, label }) => `${label} ${stats[key]}`).join('  ');
 }
+
+/** One Pokémon's overall rating: the mean of its five user-facing stats, rounded. */
+export function overall(pokemon: Pokemon): number {
+  const total = USER_STATS.reduce((sum, { key }) => sum + pokemon.stats[key], 0);
+  return Math.round(total / USER_STATS.length);
+}
+
+/** Mean overall rating of a group (e.g. a team's 7 defenders). 0 for an empty group. */
+export function averageOverall(group: readonly Pokemon[]): number {
+  if (group.length === 0) return 0;
+  return Math.round(group.reduce((sum, pokemon) => sum + overall(pokemon), 0) / group.length);
+}

@@ -5,6 +5,7 @@ import {
 import { GOAL_LINE_YARD } from '../../core/rules/downs';
 import type { DownState } from '../../types';
 import { yardsToX } from '../units';
+import { textStyle } from '../../ui/theme';
 
 /** Draws the (static) field and the two moving markers: line of scrimmage and first-down line. */
 export class Field {
@@ -44,7 +45,7 @@ export class Field {
     g.lineBetween(0, FIELD_BOTTOM, WORLD_WIDTH, FIELD_BOTTOM);
 
     // Yard numbers every 10 yards, counting up to 50 then back down
-    const style = { fontFamily: 'monospace', fontSize: '28px', color: '#ffffff' };
+    const style = textStyle(28);
     for (let yard = 10; yard <= 90; yard += 10) {
       const label = String(yard <= 50 ? yard : 100 - yard);
       scene.add.text(yardsToX(yard), FIELD_TOP + 28, label, style).setOrigin(0.5).setAlpha(0.6).setDepth(1);
