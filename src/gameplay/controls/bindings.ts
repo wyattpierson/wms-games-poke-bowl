@@ -6,7 +6,7 @@
  * R runs a handoff in preSnap and scrambles in the pass phase).
  * Swap the whole scheme here (mouse, hold-to-charge, ...) without touching game logic.
  */
-export type Action = 'snap' | 'aim' | 'run' | 'scramble' | 'juke' | 'dive' | 'pause';
+export type Action = 'snap' | 'aim' | 'run' | 'scramble' | 'juke' | 'dive' | 'pause' | 'cancel';
 
 export const ACTION_KEYS: Record<Action, string[]> = {
   snap: ['SPACE'], // preSnap: press to snap the pass play
@@ -14,6 +14,7 @@ export const ACTION_KEYS: Record<Action, string[]> = {
   run: ['R'], // preSnap: press to hand the ball to the RB and run
   scramble: ['R'], // pass: run it (QB keeps the ball)
   juke: ['SPACE'], // run: press to juke
+  cancel: ['X'], // pass: while aiming, abort the throw (no ball thrown, no down lost)
   dive: ['E'], // run: press to dive forward
   pause: ['ESC'], // any time during a match: open the pause menu (forfeit lives there, behind a confirmation)
 };

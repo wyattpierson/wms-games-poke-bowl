@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { attemptTackle, tackleChance } from './tackle';
-import { throwComesUp } from './throw';
 
 describe('attemptTackle', () => {
   it('strong tackler vs weak evader almost always tackles', () => {
@@ -18,15 +17,5 @@ describe('attemptTackle', () => {
   it('stays within the 10%..95% bounds', () => {
     expect(tackleChance(0, 99)).toBeGreaterThanOrEqual(0.1);
     expect(tackleChance(99, 0)).toBeLessThanOrEqual(0.95);
-  });
-});
-
-describe('throwComesUp', () => {
-  it('an elite-accuracy QB never overthrows', () => {
-    expect(throwComesUp(99, () => 0.999)).toBe(true);
-  });
-  it('a 0-accuracy QB overthrows half the time', () => {
-    expect(throwComesUp(0, () => 0.4)).toBe(true);
-    expect(throwComesUp(0, () => 0.6)).toBe(false);
   });
 });

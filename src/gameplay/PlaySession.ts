@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { DRIVE_START_YARD, FIELD_CENTER_Y, GAME_HEIGHT, WORLD_WIDTH } from '../config/field';
 import {
-  CAMERA_ZOOM, FIELD_GOAL_POINTS, HALVES, HALF_SECONDS, TOUCHDOWN_POINTS,
+  CAMERA_ZOOM, COVERED_RADIUS, FIELD_GOAL_POINTS, HALVES, HALF_SECONDS, OPEN_RADIUS, TOUCHDOWN_POINTS,
 } from '../config/gameplay';
 import { TEAM_COLORS } from '../config/gameplay';
 import {
@@ -9,6 +9,9 @@ import {
 } from '../core/rules/clock';
 import { addPoints, newScore, type Score } from '../core/rules/score';
 import { newDrive, resolvePlay as resolveDowns } from '../core/rules/downs';
+import { rollCoveragePlan, rollCoverageScheme, type CoveragePlan } from '../core/ai/coverage';
+import { buildPlayWith, pickPlayDef } from '../data/playbook';
+import { nearestDistance } from '../core/math/vec2';
 import type { SimResult } from '../core/simulation';
 import type { Team } from '../core/teams';
 import type { DownState, Play, PlayResult } from '../types';
@@ -57,6 +60,10 @@ export class PlaySession {
   clock: MatchClock = newMatchClock(HALVES, HALF_SECONDS);
   score: Score = newScore();
   matchOver = false;
+  /** This play's coverage (rolled at the snap): man or zone + per-slot man matchups. */
+  coverage: CoveragePlan = { scheme: 'man', beaten: [] };
+  /** The current play (a fresh route combination is rolled every down). */
+  play: Play;
   /** Set when a postPlay phase is requested; consumed by PostPlayPhase. */
   resolution: PlayResolution | null = null;
 
@@ -67,7 +74,7 @@ export class PlaySession {
 
   constructor(
     readonly scene: Phaser.Scene,
-    readonly play: Play,
+    play: Play,
     private readonly field: Field,
     readonly controls: Controls,
     readonly hud: Hud,
@@ -76,6 +83,7 @@ export class PlaySession {
     /** Campaign difficulty ramp: extra px/s for the opponent's players. */
     readonly difficultyBonus: number = 0,
   ) {
+    this.play = play;
     for (const slot of play.offense) {
       const player = new PlayerSprite(scene, 'offense', slot.position, slot.pokemon, TEAM_COLORS.offense);
       if (slot.receiverSlot !== undefined) {
@@ -111,8 +119,10 @@ export class PlaySession {
     return rb;
   }
 
-  /** Put everyone in formation at the current line of scrimmage and reset per-play state. */
+  /** Put everyone in formation at the current line of scrimmage and reset per-play state.
+   *  Rolls a fresh offensive play (route combination) and the defense's coverage scheme. */
   lineUp(): void {
+    this.rollNewPlay();
     const losX = yardsToX(this.down.lineOfScrimmage);
 
     this.play.offense.forEach((slot, i) => {
@@ -124,8 +134,21 @@ export class PlaySession {
       player.setRoute((slot.route ?? []).map((r) => ({ x: x + r.x, y: y + r.y })));
     });
     this.play.defense.forEach((slot, i) => {
-      this.defense[i]!.place(losX + slot.offset.x, FIELD_CENTER_Y + slot.offset.y);
+      const d = this.defense[i]!;
+      d.place(losX + slot.offset.x, FIELD_CENTER_Y + slot.offset.y);
+      d.zoneHome = d.pos; // zone coverage: this is the spot the defender holds
     });
+
+    // Coverage scheme + (for man) one matchup roll per receiver slot.
+    const matchups = this.receivers.map((r) => {
+      const defender = this.defense.find((d) => d.role?.kind === 'cover' && d.role.receiverSlot === r.receiverSlot);
+      return {
+        receiverSpeed: r.baseSpeed,
+        defenderSpeed: defender ? defender.baseSpeed : 0, // 0 = no man assigner (RB slot)
+        defenderAwareness: defender ? defender.internal.awareness : 0,
+      };
+    });
+    this.coverage = rollCoveragePlan(rollCoverageScheme(), matchups);
 
     this.ball.attachTo(this.qb);
     this.field.setMarkers(this.down);
@@ -172,6 +195,7 @@ export class PlaySession {
     if (this.phase instanceof PassPhase || this.phase instanceof BallInAirPhase || this.phase instanceof RunPhase) {
       this.clock = tickClock(this.clock, dt);
     }
+    this.updateSeparationIndicators();
     this.updateMatchLine();
     // Keep the camera target on the ball's GROUND position (not the flight offset).
     this.camTarget.setPosition(this.ball.pos.x, this.ball.pos.y);
@@ -184,7 +208,7 @@ export class PlaySession {
     switch (request.phase) {
       case 'preSnap': return new PreSnapPhase(this);
       case 'pass': return new PassPhase(this);
-      case 'ballInAir': return new BallInAirPhase(this, request.target);
+      case 'ballInAir': return new BallInAirPhase(this, request.landing, request.intended);
       case 'run': return new RunPhase(this, request.carrier, request.lag ?? 0);
       case 'postPlay': return new PostPlayPhase(this);
       case 'simDrive': return new SimDrivePhase(this);
@@ -204,7 +228,8 @@ export class PlaySession {
 
     switch (result.kind) {
       case 'incomplete': {
-        if (clockOut) return { message: `Incomplete pass${endSuffix}`, next: endKind };
+        const base = result.note ? `Incomplete: ${result.note}` : 'Incomplete pass';
+        if (clockOut) return { message: `${base}${endSuffix}`, next: endKind };
         const res = resolveDowns(this.down, this.down.lineOfScrimmage);
         switch (res.kind) {
           case 'turnoverOnDowns':
@@ -214,7 +239,7 @@ export class PlaySession {
           case 'firstDown':
           case 'continue':
             this.down = res.state;
-            return { message: 'Incomplete pass', next: { kind: 'continue' } };
+            return { message: base, next: { kind: 'continue' } };
         }
       }
       case 'interception':
@@ -230,6 +255,9 @@ export class PlaySession {
         }
         if (res.kind === 'firstDown' || res.kind === 'continue') this.down = res.state;
         if (clockOut) return { message: note + endSuffix, next: endKind };
+        if (res.kind === 'turnoverOnDowns') {
+          return { message: `${note}\nTurnover on downs.`, next: { kind: 'switchPossession' } };
+        }
         return {
           message: res.kind === 'firstDown' ? `${note}\nFirst down!` : note,
           next: { kind: 'continue' },
@@ -239,6 +267,28 @@ export class PlaySession {
   }
 
   /** Score + clock readout in the HUD, refreshed only when it visibly changes. */
+  /** Pick a new random route combination from the playbook (every down). */
+  rollNewPlay(): void {
+    this.play = buildPlayWith(this.userTeam, this.opponent, pickPlayDef());
+  }
+
+  /**
+   * Live open/covered rings on receivers: green = no defender within OPEN_RADIUS,
+   * red = a defender within COVERED_RADIUS. Only shown while passing / ball in the air.
+   */
+  updateSeparationIndicators(): void {
+    const show = this.phase instanceof PassPhase || this.phase instanceof BallInAirPhase;
+    const defenderPos = this.defense.map((d) => d.pos);
+    for (const r of this.receivers) {
+      if (!show) {
+        r.setOpenIndicator(null);
+        continue;
+      }
+      const nearest = nearestDistance(r.pos, defenderPos);
+      r.setOpenIndicator(nearest > OPEN_RADIUS ? 'open' : nearest < COVERED_RADIUS ? 'covered' : null);
+    }
+  }
+
   private updateMatchLine(): void {
     const text = `${this.userTeam.name} ${this.score.user}   ${formatClock(this.clock.secondsLeft)} ${halfLabel(this.clock)}   ${this.opponent.name} ${this.score.opponent}`;
     if (text !== this.lastMatchLine) {

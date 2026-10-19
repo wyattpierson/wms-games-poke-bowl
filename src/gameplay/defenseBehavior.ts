@@ -1,7 +1,8 @@
 import {
-  BALL_CHASE_SPEED_FACTOR, BLOCKED_SPEED_FACTOR, BLOCK_RADIUS, COVER_CUSHION_PX, COVER_SPEED_FACTOR,
-  PASS_RUSH_SPEED_FACTOR, PURSUIT_SPEED_FACTOR,
+  BALL_CHASE_SPEED_FACTOR, BEATEN_COVER_SPEED_FACTOR, BLOCKED_SPEED_FACTOR, BLOCK_RADIUS, COVER_CUSHION_PX,
+  COVER_SPEED_FACTOR, PASS_RUSH_SPEED_FACTOR, PURSUIT_SPEED_FACTOR, ZONE_CUSHION_PX, ZONE_RESPONSE_RADIUS,
 } from '../config/gameplay';
+import { distance, nearestIndex } from '../core/math/vec2';
 import { blockedSpeedFactor, type Blocker } from '../core/ai/defenseAI';
 import type { Vec2 } from '../types';
 import type { PlayerSprite } from './entities/PlayerSprite';
@@ -25,16 +26,52 @@ function blitzDelay(role: { delay: number }, awareness: number): number {
   return role.delay * (1.35 - 0.7 * awareness / 99);
 }
 
-/** How far ahead of the receiver a cover defender pads up: higher awareness = tighter. */
+/** How far ahead of the receiver a winning man defender pads up: higher awareness = tighter. */
 function coverCushion(awareness: number): number {
   return COVER_CUSHION_PX * (0.6 + 0.8 * awareness / 99);
 }
 
-/** Before the throw (and while the ball is in the air): linemen rush, blitzers wait then rush,
- *  others cover their assigned receiver. */
+/**
+ * Man coverage: stick to the assigned receiver. When the receiver beat the matchup
+ * (rolled at the snap) the defender chases slow and the separation grows — the WR gets
+ * open. Otherwise the defender stays glued, cushion in front, and the catch is contested.
+ */
+function updateManCoverage(session: PlaySession, defender: PlayerSprite, slot: number, dt: number): void {
+  const receiver = session.receivers[slot];
+  if (!receiver) return;
+  const beaten = session.coverage.beaten[slot];
+  const speed = beaten ? COVER_SPEED_FACTOR * BEATEN_COVER_SPEED_FACTOR : COVER_SPEED_FACTOR;
+  const cushion = beaten ? 0 : coverCushion(defender.internal.awareness);
+  chase(defender, { x: receiver.x + cushion, y: receiver.y }, speed, dt);
+}
+
+/**
+ * Zone coverage: hold the home area. A receiver inside the response radius gets chased
+ * (small cushion); otherwise the defender walks back to his zone. Running into a part of
+ * the field no defender covers is how a WR gets open against zone.
+ */
+function updateZoneCoverage(session: PlaySession, defender: PlayerSprite, dt: number): void {
+  const home = defender.zoneHome ?? defender.pos;
+  const receiverPos = session.receivers.map((r) => r.pos);
+  const idx = nearestIndex(defender.pos, receiverPos);
+  const receiver = idx >= 0 ? receiverPos[idx]! : null;
+  if (receiver && distance(defender.pos, receiver) <= ZONE_RESPONSE_RADIUS) {
+    // Close from behind (cushion along the defender->receiver line) so the ball is played over his head.
+    const dx = defender.x - receiver.x;
+    const dy = defender.y - receiver.y;
+    const d = Math.max(0.001, Math.hypot(dx, dy));
+    chase(defender, { x: receiver.x + (dx / d) * ZONE_CUSHION_PX, y: receiver.y + (dy / d) * ZONE_CUSHION_PX }, COVER_SPEED_FACTOR, dt);
+  } else {
+    chase(defender, home, COVER_SPEED_FACTOR, dt);
+  }
+}
+
+/** Before the throw (and while the ball is in the air): linemen rush, blitzers wait then rush
+ *  (man only — in zone everyone drops back), others cover. The scheme is rolled per play. */
 export function updatePassDefense(session: PlaySession, elapsed: number, dt: number): void {
   const qbPos = session.qb.pos;
   const blockers = offensiveLine(session);
+  const zone = session.coverage.scheme === 'zone';
 
   for (const defender of session.defense) {
     const role = defender.role;
@@ -46,16 +83,13 @@ export function updatePassDefense(session: PlaySession, elapsed: number, dt: num
         break;
       }
       case 'blitz':
-        if (elapsed >= blitzDelay(role, defender.internal.awareness)) chase(defender, qbPos, PASS_RUSH_SPEED_FACTOR, dt);
+        if (zone) updateZoneCoverage(session, defender, dt); // zone: the blitzers drop back
+        else if (elapsed >= blitzDelay(role, defender.internal.awareness)) chase(defender, qbPos, PASS_RUSH_SPEED_FACTOR, dt);
         break;
-      case 'cover': {
-        const receiver = session.receivers[role.receiverSlot];
-        if (receiver) {
-          const cushion = coverCushion(defender.internal.awareness);
-          chase(defender, { x: receiver.x + cushion, y: receiver.y }, COVER_SPEED_FACTOR, dt);
-        }
+      case 'cover':
+        if (zone) updateZoneCoverage(session, defender, dt);
+        else updateManCoverage(session, defender, role.receiverSlot, dt);
         break;
-      }
     }
   }
 }

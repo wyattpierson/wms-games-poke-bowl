@@ -35,5 +35,5 @@ export interface Play {
 /** How a play ended. The post-play phase turns this into the next down state. */
 export type PlayResult =
   | { kind: 'gain'; endYard: number; note: string } // tackle, sack, out of bounds, dive, touchdown run...
-  | { kind: 'incomplete' }
+  | { kind: 'incomplete'; note?: string } // note: 'Overthrown!', 'Short!', 'No receiver there!'...
   | { kind: 'interception' };

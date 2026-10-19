@@ -23,7 +23,10 @@ export class PreSnapPhase implements Phase {
     this.session.lineUp();
     this.drawRoutePreview();
     this.session.hud.setMessage('');
-    this.session.hud.setHint('SPACE: pass (hold to aim, release to throw)    R: run');
+    const scheme = this.session.coverage.scheme.toUpperCase();
+    this.session.hud.setHint(
+      `PLAY: ${this.session.play.name.toUpperCase()}   DEF: ${scheme}    |    SPACE: pass (hold to aim)    R: run`,
+    );
   }
 
   update(): void {

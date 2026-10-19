@@ -23,6 +23,32 @@ export function nearestDistance(from: Vec2, points: Vec2[]): number {
   return best;
 }
 
+/**
+ * Project a point moving along waypoints (starting at `waypointIndex`) forward in time.
+ * Returns `start` unchanged when the route is done or the speed is 0.
+ * Used to lead moving receivers: where will they be when the ball arrives?
+ */
+export function predictAlongRoute(
+  start: Vec2, waypoints: Vec2[], waypointIndex: number, speed: number, seconds: number,
+): Vec2 {
+  let t = Math.max(0, seconds);
+  if (speed <= 0) return { x: start.x, y: start.y };
+  let x = start.x;
+  let y = start.y;
+  for (let i = waypointIndex; i < waypoints.length && t > 0; i++) {
+    const wp = waypoints[i]!;
+    const d = distance({ x, y }, wp);
+    if (d <= speed * t) {
+      x = wp.x; y = wp.y; t -= d / speed;
+    } else {
+      x += ((wp.x - x) / d) * speed * t;
+      y += ((wp.y - y) / d) * speed * t;
+      t = 0;
+    }
+  }
+  return { x, y };
+}
+
 /** Index of the closest point, or -1 if there are none. */
 export function nearestIndex(from: Vec2, points: Vec2[]): number {
   let best = -1;

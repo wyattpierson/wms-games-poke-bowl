@@ -3,8 +3,7 @@ import { PLAYER_IMAGE_SIZE, PLAYER_SIZE, ROUTE_SPEED_FACTOR } from '../../config
 import { deriveStats, speedStatToPxPerSec, type InternalStats, type Pokemon } from '../../core/pokemon';
 import { spriteKey } from '../../data/sprites';
 import type { DefenseRole, Position, Side, Vec2 } from '../../types';
-import { clamp } from '../../core/math/vec2';
-import { textStyle } from '../../ui/theme';
+import { clamp, distance, predictAlongRoute } from '../../core/math/vec2';
 
 /**
  * A player on the field: the Pokémon's sprite (or a team-colored square fallback if the
@@ -25,6 +24,10 @@ export class PlayerSprite {
   /** Campaign difficulty ramp: extra px/s (opponents only, 0 for the user's team). */
   role?: DefenseRole;
   receiverSlot?: number;
+  /** Where a zone defender holds up when no receiver is in his area (set at the snap). */
+  zoneHome?: Vec2;
+  /** Last separation state drawn, so the ring only re-renders when it changes. */
+  private separation: 'open' | 'covered' | null = null;
 
   /** The visible body: sprite image when available, fallback square otherwise. */
   readonly body: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle;
@@ -32,7 +35,8 @@ export class PlayerSprite {
   private readonly container: Phaser.GameObjects.Container;
   /** Team-colored ellipse under the player so sides are readable at a glance. */
   private readonly shadow: Phaser.GameObjects.Ellipse;
-  private readonly label: Phaser.GameObjects.Text;
+  /** Receivers only: green = open, red = covered (live separation vs the defense). */
+  private readonly openRing: Phaser.GameObjects.Ellipse;
   private readonly scene: Phaser.Scene;
   private route: Vec2[] = [];
   private routeIndex = 0;
@@ -61,14 +65,13 @@ export class PlayerSprite {
     this.shadow = scene.add
       .ellipse(0, PLAYER_IMAGE_SIZE / 2, PLAYER_IMAGE_SIZE * 0.7, PLAYER_IMAGE_SIZE * 0.28, color, 0.45)
       .setDepth(9);
-    this.label = scene.add
-      .text(0, 0, pokemon.name, { ...textStyle(10), stroke: '#000000', strokeThickness: 2 })
-      .setOrigin(0.5)
-      .setDepth(11);
-    this.label.setPosition(0, PLAYER_IMAGE_SIZE / 2 + 8);
-
+    this.openRing = scene.add
+      .ellipse(0, 0, 52, 52, 0x000000, 0)
+      .setStrokeStyle(3, 0x22c55e)
+      .setDepth(12)
+      .setVisible(false);
     this.container = scene.add.container(0, 0);
-    this.container.add([this.shadow, this.body, this.label]);
+    this.container.add([this.shadow, this.openRing, this.body]);
   }
 
   get x(): number { return this.container.x; }
@@ -104,7 +107,18 @@ export class PlayerSprite {
       return;
     }
     this.moveToward(waypoint, this.baseSpeed * ROUTE_SPEED_FACTOR, dt);
-    if (this.x === waypoint.x && this.y === waypoint.y) this.routeIndex++;
+    // Advance on a small threshold: moveToward stops ~0.5 px short of the waypoint,
+    // so exact equality would leave the player stranded on the first leg.
+    if (distance(this.pos, waypoint) < 2) this.routeIndex++;
+  }
+
+  /**
+   * Where this player will be `seconds` from now if they keep running their current
+   * route (route speed, waypoint by waypoint; stopped when the route is finished).
+   * Used to lead receivers when aiming passes.
+   */
+  predictPosition(seconds: number): Vec2 {
+    return predictAlongRoute(this.pos, this.route, this.routeIndex, this.baseSpeed * ROUTE_SPEED_FACTOR, seconds);
   }
 
   /**
@@ -127,10 +141,24 @@ export class PlayerSprite {
     this.routeIndex = 0;
   }
 
+  /**
+   * Live separation indicator for receivers: green ring = open (no defender around),
+   * red ring = covered (a defender on top). `null` hides it. No-op when unchanged.
+   */
+  setOpenIndicator(state: 'open' | 'covered' | null): void {
+    if (state === this.separation) return;
+    this.separation = state;
+    if (!state) {
+      this.openRing.setVisible(false);
+      return;
+    }
+    this.openRing.setVisible(true);
+    this.openRing.setStrokeStyle(3, state === 'open' ? 0x22c55e : 0xef4444);
+  }
+
   setGhost(on: boolean): void {
     const alpha = on ? 0.55 : 1;
     this.body.setAlpha(alpha);
-    this.label.setAlpha(alpha);
     this.shadow.setAlpha(on ? 0.2 : 0.45);
   }
 
