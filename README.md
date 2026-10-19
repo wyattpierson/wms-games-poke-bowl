@@ -4,6 +4,14 @@ A retro-style American football **browser game** where every player is a Pokémo
 (Retro Bowl gameplay, Pokémon theme). See `DESIGN.md` for the full design and
 `PROGRESS.md` for build status / handoff.
 
+## Play
+
+Hosted on GitHub Pages (auto-deploys from `main` via the workflow in
+`.github/workflows/deploy.yml`).
+
+> Note: Pokémon sprites are loaded from PokeAPI at runtime, so the game needs
+> an internet connection.
+
 ## Stack
 
 TypeScript + Vite + Phaser 3 (no Phaser physics — custom movement/collision).
